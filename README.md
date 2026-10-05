@@ -76,12 +76,13 @@ python -m jevgate.tests    # offline suite, no API key needed
 ## Use it
 
 This is a library. You call it from your own code, and you decide what to do
-with the answer. Runnable version of everything below:
-`examples/sdk_usage.py`.
+with the answer. Every snippet below is copy-pasteable as-is.
+
+**Offline first.** The test suite is hermetic — a fake client stands in for the
+API, so you can check your wiring without a key:
 
 ```bash
-python examples/sdk_usage.py --demo    # offline, stubbed, no key needed
-python examples/sdk_usage.py           # live, needs TYPESAFE_API_KEY
+python -m pytest tests/ -q     # 40 tests, no key, no network
 ```
 
 **The one call.** Judge a tool call and branch on the numbers:
@@ -313,16 +314,26 @@ falls *below* both, and neither threshold blocks it at all.
 
 **So `threshold_block=0.60` is a placeholder, not a calibration.** It is the
 shipped default because it is a reasonable middle guess, and the honest way to
-use this library is to replace it with a number from your own traffic:
+use this library is to replace it with a number from your own traffic. This is
+the whole measurement, and it is six lines:
 
-```bash
-python examples/sdk_usage.py --variance "rm -rf node_modules" --runs 20
+```python
+from jevgate import Gate
+
+g = Gate(mode="enforce", cache_seconds=0)   # cache off: every call hits the API
+risks = sorted(g.check_tool("bash", {"command": "rm -rf node_modules"}).risk
+               for _ in range(20))
+
+print(f"min={risks[0]:.3f} median={risks[10]:.3f} max={risks[-1]:.3f}")
+for t in (0.20, 0.35, 0.40, 0.60, 0.70):
+    hits = sum(1 for r in risks if r >= t)
+    print(f"  threshold {t:.2f} -> blocks {hits}/20 ({100 * hits // 20}%)")
 ```
 
-Hand-label the results and run `evaluate()` on them (see [Method](#method)).
-That is the only thing that turns the default into a defensible one — a
-threshold picked from one model's scores on one day is a guess wearing a
-decimal point, and Jev is a model.
+Repeat that per command class you care about, hand-label the results, and run
+`evaluate()` on them (see [Method](#method)). That is the only thing that turns
+the default into a defensible one — a threshold picked from one model's scores
+on one day is a guess wearing a decimal point, and Jev is a model.
 
 On `risk`, the number the gate actually thresholds, 10 passes per command with
 zero verdict flips:
